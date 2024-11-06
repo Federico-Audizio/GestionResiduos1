@@ -92,12 +92,14 @@ class MainActivity : AppCompatActivity() {
             db.collection("usuarios").document("usuario1")
                 .set(barrioData)
                 .addOnSuccessListener {
+                    Toast.makeText(this, "Barrio guradado", Toast.LENGTH_SHORT).show()
                     Log.d("Firebase", "Barrio guardado con éxito en Firebase")
                     enviarNotificacionPrueba(barrioSeleccionado)
 
                 }
                 .addOnFailureListener { e ->
                     Log.e("Firebase", "Error al guardar en Firebase", e)
+                    Toast.makeText(this, "Error en el guardado", Toast.LENGTH_SHORT).show()
                 }
         }
 
@@ -203,6 +205,7 @@ class MainActivity : AppCompatActivity() {
     }
 
 }
+
 
 
 
