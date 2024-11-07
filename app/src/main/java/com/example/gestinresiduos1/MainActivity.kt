@@ -20,12 +20,12 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import java.util.Calendar
+import java.util.UUID
 import android.util.Log
-import com.google.firebase.firestore.FirebaseFirestore
-
-
+import com.google.firebase.auth.FirebaseAuth
 
 class MainActivity : AppCompatActivity() {
 
@@ -52,58 +52,58 @@ class MainActivity : AppCompatActivity() {
         "sábado" to listOf("Bº La Milka", "Bº San Martin", "Bº Bouchard", "Bº Jardín")
     )
 
+    private lateinit var auth: FirebaseAuth
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        barrioSpinner = findViewById(R.id.barrioSpinner)
-        val guardarButton: Button = findViewById(R.id.guardarButton)
-        sharedPreferences = getSharedPreferences("APP_PREFERENCES", Context.MODE_PRIVATE)
-        database = FirebaseDatabase.getInstance().reference
+        auth = FirebaseAuth.getInstance()
 
-        val barrios = servicio1.values.flatten() + servicio2.values.flatten()
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, barrios)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        barrioSpinner.adapter = adapter
+        // Asegúrate de que el usuario esté autenticado
+        val user = auth.currentUser
+        if (user != null) {
+            val userEmail = user.email ?: return
 
-        // Crear canal de notificación si es necesario (Android 8+)
-        createNotificationChannel()
+            barrioSpinner = findViewById(R.id.barrioSpinner)
+            val guardarButton: Button = findViewById(R.id.guardarButton)
+            sharedPreferences = getSharedPreferences("APP_PREFERENCES", Context.MODE_PRIVATE)
+            database = FirebaseDatabase.getInstance().reference
 
-        // Verificar permiso de notificación (Android 13+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
+            // Configurar Spinner de barrios
+            val barrios = servicio1.values.flatten() + servicio2.values.flatten()
+            val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, barrios)
+            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            barrioSpinner.adapter = adapter
+
+            // Crear canal de notificación si es necesario (Android 8+)
+            createNotificationChannel()
+
+            guardarButton.setOnClickListener {
+                val barrioSeleccionado = barrioSpinner.selectedItem.toString()
+                Log.d("MainActivity", "Botón Guardar presionado. Barrio seleccionado: $barrioSeleccionado")
+
+                // Guardar en Firestore con el correo como ID
+                val db = FirebaseFirestore.getInstance()
+                val usuarioData = hashMapOf("barrio" to barrioSeleccionado)
+
+                db.collection("usuarios").document(userEmail)
+                    .set(usuarioData) // Usa .set() para sobrescribir el documento si ya existe
+                    .addOnSuccessListener {
+                        Toast.makeText(this, "Barrio guardado", Toast.LENGTH_SHORT).show()
+                        Log.d("Firebase", "Barrio guardado con éxito en Firebase para el usuario $userEmail")
+                        enviarNotificacionPrueba(barrioSeleccionado)
+                        programarNotificacion(barrioSeleccionado)
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e("Firebase", "Error al guardar en Firebase", e)
+                        Toast.makeText(this, "Error en el guardado", Toast.LENGTH_SHORT).show()
+                    }
             }
+        } else {
+            Toast.makeText(this, "Usuario no autenticado", Toast.LENGTH_SHORT).show()
+            finish() // Finaliza la actividad si no hay usuario autenticado
         }
-
-        guardarButton.setOnClickListener {
-            val barrioSeleccionado = barrioSpinner.selectedItem.toString()
-            Log.d("MainActivity", "Botón Guardar presionado. Barrio seleccionado: $barrioSeleccionado")
-
-            // Guardar en SharedPreferences
-            val sharedPreferences = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE)
-            sharedPreferences.edit().putString("barrio", barrioSeleccionado).apply()
-            Log.d("MainActivity", "Barrio guardado en SharedPreferences")
-
-            // Guardar en Firebase
-            val db = FirebaseFirestore.getInstance()
-            val barrioData = hashMapOf("barrio" to barrioSeleccionado)
-
-            db.collection("usuarios").document("usuario1")
-                .set(barrioData)
-                .addOnSuccessListener {
-                    Toast.makeText(this, "Barrio guradado", Toast.LENGTH_SHORT).show()
-                    Log.d("Firebase", "Barrio guardado con éxito en Firebase")
-                    enviarNotificacionPrueba(barrioSeleccionado)
-
-                }
-                .addOnFailureListener { e ->
-                    Log.e("Firebase", "Error al guardar en Firebase", e)
-                    Toast.makeText(this, "Error en el guardado", Toast.LENGTH_SHORT).show()
-                }
-        }
-
-
     }
 
     private fun createNotificationChannel() {
